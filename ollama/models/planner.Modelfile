@@ -1,4 +1,4 @@
-FROM llama3.2
+FROM qwen2.5-coder:14b
 
 PARAMETER temperature 0.7
 PARAMETER top_p 0.9

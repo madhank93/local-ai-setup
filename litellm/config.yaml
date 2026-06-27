@@ -38,14 +38,33 @@ model_list:
 
   - model_name: ollama/qwen2.5-coder
     litellm_params:
-      model: ollama/qwen2.5-coder
+      model: ollama/qwen2.5-coder:14b
+      api_base: http://ollama.ai.svc.cluster.local:11434
+
+  # ── Ollama Role Models (created by ollama/sync-models.sh) ─────────────────────
+  # planner / executor / validator are FROM qwen2.5-coder:14b with role-tuned
+  # params + system prompts. aider targets `ollama/executor`.
+
+  - model_name: ollama/planner
+    litellm_params:
+      model: ollama/planner
+      api_base: http://ollama.ai.svc.cluster.local:11434
+
+  - model_name: ollama/executor
+    litellm_params:
+      model: ollama/executor
+      api_base: http://ollama.ai.svc.cluster.local:11434
+
+  - model_name: ollama/validator
+    litellm_params:
+      model: ollama/validator
       api_base: http://ollama.ai.svc.cluster.local:11434
 
   # ── Model Groups (alias sets for routing) ────────────────────────────────────
 
   - model_name: local
     litellm_params:
-      model: ollama/llama3.2
+      model: ollama/executor
       api_base: http://ollama.ai.svc.cluster.local:11434
 
   - model_name: cloud
