@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Push all Modelfiles to a running Ollama instance.
-# Usage: OLLAMA_HOST=http://ollama.homelab.madhan.app ./sync-models.sh
+# Usage: OLLAMA_HOST=http://<ollama-lan-ip>:11434 ./sync-models.sh   # LoadBalancer LAN IP (Cilium LB-IPAM); or http://localhost:11434 via `kubectl -n ollama port-forward svc/ollama 11434:11434`
 set -euo pipefail
 
 OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
