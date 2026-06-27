@@ -24,22 +24,22 @@ model_list:
   - model_name: ollama/llama3.2
     litellm_params:
       model: ollama/llama3.2
-      api_base: http://ollama.ai.svc.cluster.local:11434
+      api_base: http://ollama.ollama.svc.cluster.local:11434
 
   - model_name: ollama/mistral
     litellm_params:
       model: ollama/mistral
-      api_base: http://ollama.ai.svc.cluster.local:11434
+      api_base: http://ollama.ollama.svc.cluster.local:11434
 
   - model_name: ollama/deepseek-r1
     litellm_params:
       model: ollama/deepseek-r1
-      api_base: http://ollama.ai.svc.cluster.local:11434
+      api_base: http://ollama.ollama.svc.cluster.local:11434
 
   - model_name: ollama/qwen2.5-coder
     litellm_params:
       model: ollama/qwen2.5-coder:14b
-      api_base: http://ollama.ai.svc.cluster.local:11434
+      api_base: http://ollama.ollama.svc.cluster.local:11434
 
   # ── Ollama Role Models (created by ollama/sync-models.sh) ─────────────────────
   # planner / executor / validator are FROM qwen2.5-coder:14b with role-tuned
@@ -48,24 +48,24 @@ model_list:
   - model_name: ollama/planner
     litellm_params:
       model: ollama/planner
-      api_base: http://ollama.ai.svc.cluster.local:11434
+      api_base: http://ollama.ollama.svc.cluster.local:11434
 
   - model_name: ollama/executor
     litellm_params:
       model: ollama/executor
-      api_base: http://ollama.ai.svc.cluster.local:11434
+      api_base: http://ollama.ollama.svc.cluster.local:11434
 
   - model_name: ollama/validator
     litellm_params:
       model: ollama/validator
-      api_base: http://ollama.ai.svc.cluster.local:11434
+      api_base: http://ollama.ollama.svc.cluster.local:11434
 
   # ── Model Groups (alias sets for routing) ────────────────────────────────────
 
   - model_name: local
     litellm_params:
       model: ollama/executor
-      api_base: http://ollama.ai.svc.cluster.local:11434
+      api_base: http://ollama.ollama.svc.cluster.local:11434
 
   - model_name: cloud
     litellm_params:
