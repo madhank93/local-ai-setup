@@ -1,0 +1,72 @@
+model_list:
+  # ── Anthropic Cloud ─────────────────────────────────────────────────────────
+  # Used for planning, reasoning, validation
+
+  - model_name: claude-sonnet-4-6
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-opus-4-8
+    litellm_params:
+      model: anthropic/claude-opus-4-8
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-haiku-4-5
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # ── Ollama Local ─────────────────────────────────────────────────────────────
+  # Used for bulk/draft/cheap execution tasks
+  # Add entries as you pull models: `ollama pull <model>`
+
+  - model_name: ollama/llama3.2
+    litellm_params:
+      model: ollama/llama3.2
+      api_base: http://ollama.ai.svc.cluster.local:11434
+
+  - model_name: ollama/mistral
+    litellm_params:
+      model: ollama/mistral
+      api_base: http://ollama.ai.svc.cluster.local:11434
+
+  - model_name: ollama/deepseek-r1
+    litellm_params:
+      model: ollama/deepseek-r1
+      api_base: http://ollama.ai.svc.cluster.local:11434
+
+  - model_name: ollama/qwen2.5-coder
+    litellm_params:
+      model: ollama/qwen2.5-coder
+      api_base: http://ollama.ai.svc.cluster.local:11434
+
+  # ── Model Groups (alias sets for routing) ────────────────────────────────────
+
+  - model_name: local
+    litellm_params:
+      model: ollama/llama3.2
+      api_base: http://ollama.ai.svc.cluster.local:11434
+
+  - model_name: cloud
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+router_settings:
+  routing_strategy: simple-shuffle
+  allowed_fails: 3
+  cooldown_time: 60
+  num_retries: 2
+  timeout: 120
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  ui_access_mode: all
+  store_model_in_db: false
+  max_budget: 50  # USD hard cap
+  budget_duration: 30d
