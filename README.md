@@ -1,4 +1,4 @@
-# Local-AI Offload — Usage Guide
+# Local-AI Offload
 
 Reduce Claude (cloud) token spend by offloading bulk implementation to a local
 model on the homelab GPU. **Claude plans + reviews; a local model (via aider →
@@ -9,12 +9,16 @@ Claude only handles the plan and the final diff review.
 
 ## Architecture
 
-```
-Claude Code (Opus, cloud)          aider (laptop)              ollama (homelab GPU)
-   plan + review   ──plan.md──►   drives local model   ──HTTP──►  qwen2.5-coder:14b
-   (low tokens,$$)                edits repo, diffs     ◄───────  free inference
-        ▲                              │
-        └──────── git diff ────────────┘   (review locally, then commit)
+```mermaid
+flowchart LR
+    C["Claude Code · Opus (cloud)<br/>plan + review<br/>low tokens 💰"]
+    A["aider (laptop)<br/>repo-map · apply diffs"]
+    O["ollama · homelab GPU<br/>qwen2.5-coder:14b<br/>free inference"]
+
+    C -- "plan.md" --> A
+    A -- "task + code (HTTP)" --> O
+    O -- "diffs" --> A
+    A -- "git diff (review locally)" --> C
 ```
 
 - **Claude** — expensive brain. Plans + reviews only. Low token volume.
