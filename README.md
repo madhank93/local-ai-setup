@@ -120,29 +120,47 @@ bulk implementation myself unless asked.
 
 ---
 
-## 3. Per-repo setup (optional overrides)
+## 3. Per-repo setup
 
-Only needed when a repo wants different settings than the global default.
+Drop three files in any repo to use the local model there — no global config
+needed. This repo ships them as working examples.
 
-Repo-local **`.aider.conf.yml`** (overrides `~/.aider.conf.yml`):
+**`.aider.conf.yml`** (commit it — shared with collaborators):
 
 ```yaml
-model: ollama/gpt-oss:20b    # e.g. heavier model for this repo
-edit-format: diff
-auto-commits: false
+model: ollama/qwen2.5-coder:14b
+edit-format: diff        # smaller diffs = fewer tokens
+auto-commits: false      # review before committing
+map-tokens: 1024         # cap repo-map size
 ```
 
-Limit aider's context with **`.aiderignore`** (gitignore syntax — keeps local
-tokens down, faster):
+**`.env`** (gitignored — holds the endpoint; copy from `.env.example`):
+
+```bash
+OLLAMA_API_BASE=http://<ollama-lan-ip>:11434   # or http://localhost:11434 via port-forward
+```
+
+aider auto-loads `.env` from the repo root. `.env` is already in `.gitignore`,
+so endpoints stay out of git.
+
+**`.aiderignore`** (commit it — keeps the repo-map small, fewer tokens):
 
 ```
 node_modules/
 dist/
-*.lock
 vendor/
+*.lock
 ```
 
-Commit both so the repo's collaborators share the setup.
+Then, inside the repo:
+
+```bash
+pipx install aider-chat   # once per machine
+aider <files>             # uses repo .aider.conf.yml + .env
+```
+
+> Per-repo config **overrides** any global `~/.aider.conf.yml`. Start per-repo;
+> promote to global (§2) once you want it everywhere.
 
 ---
 
@@ -184,10 +202,6 @@ Switch per invocation: `aider --model ollama/gpt-oss:20b`.
 
 ---
 
-## Notes
-
-- Endpoints are placeholders (`<ollama-lan-ip>`) on purpose — keep homelab IPs/
-  domains out of git.
-- LiteLLM (`litellm/config.yaml`) is optional; only deploy it if you want a
-  unified cloud+local endpoint with budget caps.
-```
+> Endpoints shown as `<ollama-lan-ip>` are placeholders — keep homelab IPs/domains
+> out of git. LiteLLM (`litellm/config.yaml`) is optional: only deploy it for a
+> unified cloud+local endpoint with budget caps.
