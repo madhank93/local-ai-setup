@@ -1,0 +1,8 @@
+# Keep aider's repo-map small (gitignore syntax) → fewer tokens, faster.
+node_modules/
+dist/
+build/
+vendor/
+.git/
+*.lock
+*.min.*

@@ -1,0 +1,6 @@
+# Per-repo aider config — local-model implementation via ollama.
+# Endpoint comes from .env (OLLAMA_API_BASE). See README.md.
+model: ollama/qwen2.5-coder:14b
+edit-format: diff        # smaller diffs = fewer tokens
+auto-commits: false      # review the diff before committing
+map-tokens: 1024         # cap repo-map size
