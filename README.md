@@ -1,9 +1,9 @@
 # Local-AI Offload
 
-Reduce Claude (cloud) token spend by offloading bulk implementation to a local
-model on the homelab GPU. **Claude plans + reviews; a local model (via aider →
-ollama) implements.** The token-heavy edit loop runs on the free local GPU;
-Claude only handles the plan and the final diff review.
+Cut Claude (cloud) token spend by offloading bulk implementation to a local model
+on the homelab GPU. **Claude Code plans + reviews (cloud); aider + a local model
+implement (homelab GPU).** Two separate tools, two direct connections — no proxy,
+no router.
 
 ---
 
@@ -11,119 +11,84 @@ Claude only handles the plan and the final diff review.
 
 ```mermaid
 flowchart LR
-    C["Claude Code · Opus (cloud)<br/>plan + review<br/>low tokens 💰"]
-    A["aider (laptop)<br/>repo-map · apply diffs"]
-    O["ollama · homelab GPU<br/>qwen2.5-coder:14b<br/>free inference"]
+    subgraph laptop["Laptop"]
+        C["Claude Code · Opus<br/>plan + review"]
+        A["aider<br/>repo-map · apply diffs"]
+    end
+    AN["Anthropic API<br/>(cloud)"]
+    O["ollama · homelab GPU<br/>qwen2.5-coder:14b"]
 
-    C -- "plan.md" --> A
-    A -- "task + code (HTTP)" --> O
-    O -- "diffs" --> A
-    A -- "git diff (review locally)" --> C
+    C <== "HTTPS · plan/review" ==> AN
+    A == "OpenAI API · HTTP/LAN" ==> O
+    O == "diffs" ==> A
+    C -. "① hand off plan.md" .-> A
+    A -. "④ git diff → review" .-> C
 ```
 
-- **Claude** — expensive brain. Plans + reviews only. Low token volume.
-- **aider** — harness that does the editing: repo-map, sends task + relevant code
-  to a model, applies returned diffs, can run tests/lint in a loop.
-- **ollama** — serves the local model over HTTP on the GPU. Free inference.
-- **LiteLLM** — *optional* router (budget caps, mixing cloud+local). Not required
-  for the aider→ollama path.
+*Solid = live network connections. Dashed = the manual handoff of artifacts between the two tools.*
 
-**What lives where:**
-
-| Layer | Scope | Set up |
-|---|---|---|
-| ollama + pulled models | **cluster — shared by ALL repos** | once |
-| aider install + `~/.aider.conf.yml` | **laptop — global** | once |
-| LAN reachability (LoadBalancer IP) | **global** | once |
-| `.aider.conf.yml` inside a repo | **per-repo (optional override)** | as needed |
-| plan→aider→review workflow | habit / `~/.claude/CLAUDE.md` | optional |
-
-> You do **not** copy this repo into every project. This repo is cluster
-> scaffolding (deploy-once). "Global" = configure the laptop + expose ollama on LAN.
+- **Claude Code** — the expensive brain. Talks **directly** to `api.anthropic.com`.
+  Plans + reviews only. Low token volume.
+- **aider** — the local editor. Talks **directly** to ollama (OpenAI-compatible API).
+  Builds a repo-map, sends the task + relevant code, applies returned diffs, can run
+  tests/lint in a loop.
+- **ollama** — serves the local model on the GPU. Free inference.
 
 ---
 
-## 1. One-time cluster setup (serves every repo)
+## How the handoff works (plan → implement → review)
 
-Models live on the GPU node and serve all repos.
+The switch between cloud and local is **explicit and manual** — you move between two
+tools, and each stays in its lane: Claude Code never touches the local model; aider
+never touches Anthropic.
 
-```bash
-# Pull/refresh role models on the running Ollama (also pulls the base):
-OLLAMA_HOST=http://<ollama-lan-ip>:11434 ./ollama/sync-models.sh
+| Phase | Tool → connection | Cost | What happens |
+|---|---|---|---|
+| ① Plan | Claude Code → Anthropic (HTTPS) | small $ | Describe the task; Opus writes a short `plan.md`. |
+| ② Implement | aider → ollama (HTTP/LAN) | free | `aider --message-file plan.md <files>`; local model edits + applies diffs. |
+| ③ Execute / test | aider (local shell) or you | free | aider can run a test/lint command in-loop (`--test-cmd`) and self-fix. |
+| ④ Review | Claude Code → Anthropic (HTTPS) | small $ | `git diff`; Opus validates, finds bugs, requests fixes → back to ②. |
 
-# Verify:
-kubectl -n ollama exec deploy/ollama -- ollama list   # expect qwen2.5-coder:14b + role models
-```
+Loop ②–④ until it passes, then commit. **Claude only ever sees the plan and the
+diffs — never the token-heavy edit loop.**
 
-**Stable LAN access (recommended).** Set the ollama Service to
-`type: LoadBalancer` (manifest in the homelab repo). Cilium LB-IPAM assigns a
-`192.168.1.x` IP — one endpoint, every repo, no port-forward.
+**Connections at a glance**
+- Claude Code → `api.anthropic.com` — your Claude auth, HTTPS. Direct.
+- aider → `OLLAMA_API_BASE` (e.g. `http://<lan-ip>:11434`) — OpenAI-compatible, plain
+  HTTP on the LAN. Direct.
+- ollama → GPU — local, in-cluster on the GPU worker node.
 
-```yaml
-# ollama Service (homelab repo)
-spec:
-  type: LoadBalancer   # Cilium LB-IPAM → 192.168.1.x
-```
-
-Find the assigned IP:
-
-```bash
-kubectl -n ollama get svc ollama -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
-```
-
-**No LoadBalancer?** Use a per-session port-forward (one terminal serves all repos):
-
-```bash
-kubectl -n ollama port-forward svc/ollama 11434:11434   # endpoint: http://localhost:11434
-```
+There is **no automatic routing**: *you* decide which tool runs each phase. That is
+the whole point — Claude tokens stay limited to plan+review, while the bulk runs on
+the free local GPU.
 
 ---
 
-## 2. Global laptop setup (use in ANY repo)
+## Setup
 
-Install aider once:
+### 1. Cluster (once, GitOps — serves every repo)
 
-```bash
-pipx install aider-chat        # or: brew install aider
-```
+ollama, the model, and the LAN endpoint are declared in the **homelab repo**
+(CDK8s → ArgoCD), not here:
 
-Global config — **`~/.aider.conf.yml`**:
+- model pulled declaratively (`ollama.models.pull: [qwen2.5-coder:14b]`)
+- Service `type: LoadBalancer` → Cilium LB-IPAM assigns a stable `192.168.1.x` LAN IP
 
-```yaml
-model: ollama/qwen2.5-coder:14b
-edit-format: diff        # smaller outputs
-auto-commits: false      # review before committing
-map-tokens: 1024         # cap repo-map size
-```
-
-Point aider at ollama — add to **`~/.zshrc`**:
+Verify after ArgoCD syncs:
 
 ```bash
-export OLLAMA_API_BASE=http://<ollama-lan-ip>:11434   # or http://localhost:11434 via port-forward
+kubectl -n ollama exec deploy/ollama -- ollama list                                  # model present
+kubectl -n ollama get svc ollama -o jsonpath='{.status.loadBalancer.ingress[0].ip}'  # LAN IP
 ```
 
-Reload: `source ~/.zshrc`. Now in **any repo**:
+No LoadBalancer yet? Temporary: `kubectl -n ollama port-forward svc/ollama 11434:11434`
+→ `http://localhost:11434`. (Ad-hoc extra role models:
+`OLLAMA_HOST=http://<lan-ip>:11434 ./ollama/sync-models.sh`.)
 
-```bash
-aider <files>            # picks up global config + endpoint automatically
-```
+### 2. Per-repo (start here)
 
-**Optional — make Claude default to the workflow.** Add to `~/.claude/CLAUDE.md`:
-
-```markdown
-## Local-model offload
-For implementation, prefer: write a concise plan.md, then hand it to local
-aider (`aider --message-file plan.md <files>`) which runs qwen2.5-coder on the
-homelab GPU. I (Claude) plan and review the resulting diff — I do not write the
-bulk implementation myself unless asked.
-```
-
----
-
-## 3. Per-repo setup
-
-Drop three files in any repo to use the local model there — no global config
-needed. This repo ships them as working examples.
+Drop three files in a repo — no global config needed. This repo ships them as
+working examples.
 
 **`.aider.conf.yml`** (commit it — shared with collaborators):
 
@@ -140,8 +105,8 @@ map-tokens: 1024         # cap repo-map size
 OLLAMA_API_BASE=http://<ollama-lan-ip>:11434   # or http://localhost:11434 via port-forward
 ```
 
-aider auto-loads `.env` from the repo root. `.env` is already in `.gitignore`,
-so endpoints stay out of git.
+aider auto-loads `.env` from the repo root; `.env` is gitignored so endpoints stay
+out of git.
 
 **`.aiderignore`** (commit it — keeps the repo-map small, fewer tokens):
 
@@ -152,26 +117,38 @@ vendor/
 *.lock
 ```
 
-Then, inside the repo:
+Install + run:
 
 ```bash
-pipx install aider-chat   # once per machine
-aider <files>             # uses repo .aider.conf.yml + .env
+uv tool install aider-chat   # once per machine (uv tool upgrade aider-chat to update)
+aider <files>                # uses repo .aider.conf.yml + .env
 ```
 
-> Per-repo config **overrides** any global `~/.aider.conf.yml`. Start per-repo;
-> promote to global (§2) once you want it everywhere.
+### 3. Global (optional — once you want it everywhere)
+
+Promote the per-repo config to machine defaults so a bare `aider` works in any repo:
+
+- `~/.aider.conf.yml` — same keys as §2
+- `~/.zshrc`: `export OLLAMA_API_BASE=http://<ollama-lan-ip>:11434`
+- (optional) `~/.claude/CLAUDE.md` — tell Claude to default to the
+  plan → aider → review workflow:
+
+  ```markdown
+  ## Local-model offload
+  For implementation, write a concise plan.md, then hand it to local aider
+  (`aider --message-file plan.md <files>`) running on the homelab GPU. I (Claude)
+  plan and review the diff — I do not write the bulk implementation unless asked.
+  ```
+
+Per-repo config (§2) **overrides** global.
 
 ---
 
-## 4. Daily workflow (any repo)
+## Daily workflow
 
 1. **Claude Code (Opus):** describe the task → produce a short `plan.md`.
-2. **Implement locally (free):**
-   ```bash
-   aider --message-file plan.md path/to/files
-   ```
-3. **Review:** `git diff` → Claude validates / runs tests → fix loop (repeat step 2).
+2. **Implement (free):** `aider --message-file plan.md <files>` → local model edits.
+3. **Review:** `git diff` → Claude validates / runs tests → fix loop (repeat 2).
 4. **Commit** when it passes.
 
 ---
@@ -202,6 +179,4 @@ Switch per invocation: `aider --model ollama/gpt-oss:20b`.
 
 ---
 
-> Endpoints shown as `<ollama-lan-ip>` are placeholders — keep homelab IPs/domains
-> out of git. LiteLLM (`litellm/config.yaml`) is optional: only deploy it for a
-> unified cloud+local endpoint with budget caps.
+> Endpoints shown as `<ollama-lan-ip>` are placeholders — keep homelab IPs/domains out of git.
