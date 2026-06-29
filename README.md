@@ -34,11 +34,6 @@ flowchart LR
   tests/lint in a loop.
 - **ollama** — serves the local model on the GPU. Free inference.
 
-> **No LiteLLM / router.** Claude Code is Claude-only and cannot route to a local
-> model; aider does the local work over its own direct connection. A proxy would
-> only add a hop. (LiteLLM earns its place only as a multi-user *control plane* —
-> budget caps, fallback, unified endpoint — not this single-user setup.)
-
 ---
 
 ## How the handoff works (plan → implement → review)
