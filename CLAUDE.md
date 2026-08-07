@@ -1,24 +1,74 @@
 # Working agreement — local-model offload
 
-This repo uses a local-model offload workflow (see `README.md`): **I (Claude) plan
-and review; the local model implements** via aider → ollama. One window, my
-subscription pays only for planning + review, the bulk codegen runs free on the
-homelab GPU.
+This repo uses a 3-role local-model workflow: **I (Claude) plan and review;
+the local model implements** via aider → ollama. Bulk codegen runs free on
+the homelab GPU (RTX 5070 Ti, Ollama LoadBalancer via Cilium LB-IPAM).
 
-## When you ask me to implement / build / write non-trivial code here
+Cluster infra (Ollama deployment, GPU node, networking) is GitOps-managed in
+the **homelab repo** (CDK8s → ArgoCD) — not here. This repo owns only the
+role Modelfiles, the sync script, and the offload workflow.
 
-1. Produce a **short plan** first (what files, what changes).
-2. **Delegate the implementation to the local model** instead of writing the bulk
-   myself — run the `/offload` command, or directly:
-   ```bash
-   aider --yes --message "<the plan/task>"   # uses .aider.conf.yml → ollama/qwen2.5-coder:14b, no auto-commit
-   ```
-3. **Review** the resulting `git diff`, inspect/run tests, and iterate by re-running
-   aider with follow-up instructions.
-4. **Do not commit** unless you ask me to.
+## Roles
 
-Keep my own token use to planning + review; let the local model generate the bulk.
+| Role | Model | Purpose |
+|---|---|---|
+| **executor** | `ollama/executor` | Implements steps via aider |
 
-**Prereqs:** `aider` on PATH (`uv tool install aider-chat`) and `OLLAMA_API_BASE`
-set/reachable (from `.env` or the shell). Trivial one-line edits I can just make
-directly — delegation is for non-trivial implementation.
+Built `FROM hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:UD-Q3_K_XL`,
+`num_ctx 16384`. Planning and review are mine — no local planner or validator.
+
+Sync: `./ollama/sync-models.sh`
+
+**16GB VRAM rule:** weights ≤14GB so model + KV cache stay 100% VRAM-resident.
+A spill crosses the eGPU dock's OCuLink x4 link and costs throughput (measured
+on GLM: 107.8 → 25.8 tok/s). Verify with `/api/ps` — `size_vram` must equal
+`size`. See README for the sizing table.
+
+**Picking a replacement model:** SWE-bench rank does not predict aider behavior
+at Q3. GLM-4.7-Flash outscores Qwen3-Coder by ~37 points and still lost the
+bake-off. Always run a real repo-scale task and check the result executes, not
+just that it parses.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `/offload <task or plan.md> [-- file1 file2]` | Delegate to local model, show diff, review |
+
+## Workflow
+
+1. **Plan** — Claude produces a short plan
+2. **Delegate** — `/offload` or `aider --yes --message "<task>"`
+3. **Review** — Claude inspects `git diff`
+4. **Iterate** — re-run aider with targeted `--message`
+5. **No commit** — unless explicitly asked
+
+Trivial one-line edits: Claude does directly. Everything else: delegate.
+
+## Prereqs
+
+```bash
+uv tool install aider-chat
+cp .env.example .env
+source .env
+./ollama/sync-models.sh
+curl -sf "${OLLAMA_API_BASE}/api/tags" | python3 -m json.tool
+```
+
+| Connection | Command |
+|---|---|
+| LAN direct (Cilium LB) | `export OLLAMA_API_BASE=http://<lb-ip>:11434` |
+| Port-forward Ollama | `kubectl -n ollama port-forward svc/ollama 11434:11434` |
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `ollama NOT reachable` | `kubectl -n ollama port-forward svc/ollama 11434:11434` |
+| `model not found` | `./ollama/sync-models.sh` |
+| aider wrong model | Unset `AIDER_MODEL`; check `.aider.conf.yml` |
+| Decode drops to ~25 tok/s | Model spilled to host RAM. Check `/api/ps`; lower `num_ctx` |
+| `</think>` in filenames or edits | Never prefill `<think></think>` in a Modelfile TEMPLATE — Ollama only strips it when the model reports the `thinking` capability; check `/api/show` |
+| Edits ignore chat history | Community GGUF shipped a single-turn template. Check `/api/show` for a `{{ range .Messages }}` loop before adopting a new base |
+| GPU missing after Talos boot | Blackwell needs `nvidia-open-gpu-kernel-modules` (proprietary branch does not support RTX 50xx) + `nvidia-container-toolkit`, version-matched, via Image Factory schematic |
+| Other PCI passthrough broke | Attaching the eGPU dock can renumber IOMMU groups. OCuLink is not hot-plug safe — power the dock before host boot |
