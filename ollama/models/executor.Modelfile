@@ -1,15 +1,25 @@
-FROM qwen2.5-coder:14b
+FROM hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:UD-Q3_K_XL
 
-PARAMETER temperature 0.2
-PARAMETER top_p 0.85
+# num_ctx 16384 is measured, not chosen: on the 16GB RTX 5070 Ti this build sits at
+# 15.54GB / 100% VRAM-resident (37 tok/s). At 32768 it grows to 17.38GB, spills 1.9GB
+# to host RAM over the eGPU link, and decode drops to 31 tok/s. Re-measure with
+# `/api/ps` (size_vram must equal size) before raising this.
 PARAMETER num_ctx 16384
+
+PARAMETER temperature 0.15
+PARAMETER top_p 0.85
+PARAMETER repeat_penalty 1.05
+
+# No TEMPLATE override: this GGUF ships a correct multi-turn Qwen chat template
+# (reports capabilities: [completion, tools]). GLM-4.7-Flash's community GGUF does not
+# — it ships a single-turn stub — which is one reason it lost the bake-off.
 
 SYSTEM """
 You are a precise code and task execution assistant. Given a step from a plan:
-1. Execute exactly what is asked — no extra scope
-2. Output working code or commands only
-3. If ambiguous, state the assumption made and proceed
-4. No explanations unless asked
-
-Precision over verbosity.
+1. Execute exactly what is asked — no extra scope, no refactoring beyond the task
+2. Output working code or commands only — no prose unless asked
+3. If ambiguous, state the single assumption in one line, then proceed
+4. For shell scripts: use set -euo pipefail, quote all variables, handle errors explicitly
+5. Produce minimal diffs — touch only what the task requires
+Precision and correctness over verbosity. Never truncate output.
 """
