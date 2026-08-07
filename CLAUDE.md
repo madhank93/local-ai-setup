@@ -69,6 +69,6 @@ curl -sf "${OLLAMA_API_BASE}/api/tags" | python3 -m json.tool
 | aider wrong model | Unset `AIDER_MODEL`; check `.aider.conf.yml` |
 | Decode drops to ~25 tok/s | Model spilled to host RAM. Check `/api/ps`; lower `num_ctx` |
 | `</think>` in filenames or edits | Never prefill `<think></think>` in a Modelfile TEMPLATE — Ollama only strips it when the model reports the `thinking` capability; check `/api/show` |
-| Edits ignore chat history | Community GGUF shipped a single-turn template. Check `/api/show` for a `{{ range .Messages }}` loop before adopting a new base |
+| Edits ignore chat history | Community GGUF shipped a single-turn template. Grep the `/api/show` template for `range.*\.Messages` before adopting a new base — Qwen's real loop is `{{- range $i, $_ := .Messages }}`, so an exact-string search for `{{ range .Messages }}` false-negatives a working model. A single-turn template has no `.Messages` at all and reports `capabilities: [completion]` only |
 | GPU missing after Talos boot | Blackwell needs `nvidia-open-gpu-kernel-modules` (proprietary branch does not support RTX 50xx) + `nvidia-container-toolkit`, version-matched, via Image Factory schematic |
 | Other PCI passthrough broke | Attaching the eGPU dock can renumber IOMMU groups. OCuLink is not hot-plug safe — power the dock before host boot |
