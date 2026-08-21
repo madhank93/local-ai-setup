@@ -15,9 +15,13 @@ role Modelfiles, the sync script, and the offload workflow.
 | **executor** | `ollama/executor` | Implements steps via aider |
 
 Built `FROM hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:UD-Q3_K_XL`,
-`num_ctx 16384`. Planning and review are mine — no local planner or validator.
+`num_ctx 14336`. Planning and review are mine — no local planner or validator.
 
 Sync: `./ollama/sync-models.sh`
+
+The cluster pulls the base weights declaratively; `executor` itself is an
+`ollama create` on top of them, so it is this repo's job and must be re-run
+against any freshly provisioned model volume.
 
 **16GB VRAM rule:** weights ≤14GB so model + KV cache stay 100% VRAM-resident.
 A spill crosses the eGPU dock's OCuLink x4 link and costs throughput (measured
@@ -66,6 +70,7 @@ curl -sf "${OLLAMA_API_BASE}/api/tags" | python3 -m json.tool
 |---|---|
 | `ollama NOT reachable` | `kubectl -n ollama port-forward svc/ollama 11434:11434` |
 | `model not found` | `./ollama/sync-models.sh` |
+| `/api/tags` lists only base models, `executor` gone | The model dir lost its PVC. Check `kubectl -n ollama get pvc` binds; the otwld chart's key is `persistentVolume`, and a wrong key silently degrades it to `emptyDir`. Re-create with `./ollama/sync-models.sh --force` |
 | aider wrong model | Unset `AIDER_MODEL`; check `.aider.conf.yml` |
 | Decode drops to ~25 tok/s | Model spilled to host RAM. Check `/api/ps`; lower `num_ctx` |
 | `</think>` in filenames or edits | Never prefill `<think></think>` in a Modelfile TEMPLATE — Ollama only strips it when the model reports the `thinking` capability; check `/api/show` |
