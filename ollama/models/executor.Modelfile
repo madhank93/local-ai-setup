@@ -1,10 +1,11 @@
 FROM hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:UD-Q3_K_XL
 
-# num_ctx 16384 is measured, not chosen: on the 16GB RTX 5070 Ti this build sits at
-# 15.54GB / 100% VRAM-resident (37 tok/s). At 32768 it grows to 17.38GB, spills 1.9GB
-# to host RAM over the eGPU link, and decode drops to 31 tok/s. Re-measure with
-# `/api/ps` (size_vram must equal size) before raising this.
-PARAMETER num_ctx 16384
+# num_ctx 14336 is measured, not chosen: on the 16GB RTX 5070 Ti this build sits at
+# 15.14GB / 100% VRAM-resident and decodes at 113 tok/s. 16384 grows it to 15.55GB,
+# spills 0.32GB over the eGPU link, and decode collapses to 6.4 tok/s — the spill
+# cliff is far steeper than the context gain. Re-measure with `/api/ps` (size_vram
+# must equal size) before raising this.
+PARAMETER num_ctx 14336
 
 PARAMETER temperature 0.15
 PARAMETER top_p 0.85
