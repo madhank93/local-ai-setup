@@ -107,12 +107,17 @@ AOOSTAR AG02 dock's OCuLink link (PCIe 4.0 x4, ~8 GB/s) instead of GDDR7
 | Config | Footprint | On GPU | Decode |
 |---|---|---|---|
 | Qwen3-Coder Q3, `num_ctx` 32768 | 17.38GB | 89.2% | 30.9 tok/s |
-| Qwen3-Coder Q3, **`num_ctx` 16384** | 15.54GB | **100%** | **37.0 tok/s** |
+| Qwen3-Coder Q3, `num_ctx` 16384 | 15.55GB | 97.9% | 6.4 tok/s |
+| Qwen3-Coder Q3, **`num_ctx` 14336** | 15.14GB | **100%** | **105-113 tok/s** |
 | GLM-4.7-Flash Q3, `num_ctx` 32768 | 17.54GB | 89.3% | 25.8 tok/s |
 | GLM-4.7-Flash Q3, `num_ctx` 16384 | 15.60GB | 100% | 107.8 tok/s |
 
 Both 13.8GB builds spill ~1.9GB at 32K and cost throughput for it — on GLM the
 same spill cost 4.2x. That is the whole reason for the ≤14GB rule.
+
+The cliff is not gradual. Qwen3-Coder at 16384 misses full residency by 0.32GB
+and loses 94% of its decode rate; 2K less context buys all of it back. Treat
+`size_vram == size` in `/api/ps` as pass/fail, not as a gauge.
 
 What does *not* fit: `devstral-small-2:24b` (15GB), `qwen3.6:27b` (17GB),
 `qwen3-coder:30b-a3b` q4 (19GB), `glm-4.7-flash` official q4 tag (19GB),
