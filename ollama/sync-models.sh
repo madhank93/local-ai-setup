@@ -17,7 +17,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODELS_DIR="$SCRIPT_DIR/models"
 DRY_RUN=false; FORCE=false
 # Must match FROM in models/executor.Modelfile. UD-Q3_K_XL (13.8GB) is the largest build
-# that stays 100% VRAM-resident on a 16GB card at num_ctx 16384 — see README.
+# that stays 100% VRAM-resident on a 16GB card at num_ctx 28672 with a q8_0 KV
+# cache — see README.
 BASE_MODEL="hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:UD-Q3_K_XL"
 
 for arg in "$@"; do

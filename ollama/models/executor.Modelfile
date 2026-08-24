@@ -1,11 +1,19 @@
 FROM hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:UD-Q3_K_XL
 
-# num_ctx 14336 is measured, not chosen: on the 16GB RTX 5070 Ti this build sits at
-# 15.14GB / 100% VRAM-resident and decodes at 113 tok/s. 16384 grows it to 15.55GB,
-# spills 0.32GB over the eGPU link, and decode collapses to 6.4 tok/s — the spill
-# cliff is far steeper than the context gain. Re-measure with `/api/ps` (size_vram
-# must equal size) before raising this.
-PARAMETER num_ctx 14336
+# num_ctx 28672 is measured, not chosen. The KV cache is the only part of the
+# footprint that grows with context: at q8_0 it costs 45KB/token, against a
+# ctx-independent 13.82GB of weights and compute graph. 28672 therefore sits at
+# 15.14GB — the same figure that was already proven 100% VRAM-resident — and
+# decodes at ~127 tok/s.
+#
+# The earlier 14336 was measured before OLLAMA_FLASH_ATTENTION and
+# OLLAMA_KV_CACHE_TYPE were actually set on the cluster, so it was sizing an
+# f16 cache at 90KB/token while the README assumed q8_0. Both are set now.
+#
+# Re-measure with `/api/ps` (size_vram must equal size) before raising this, and
+# take the reading warm: the first request after a load reports the CUDA init as
+# decode time and looks like a spill (6 tok/s) when nothing is wrong.
+PARAMETER num_ctx 28672
 
 PARAMETER temperature 0.15
 PARAMETER top_p 0.85
