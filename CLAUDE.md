@@ -15,7 +15,7 @@ role Modelfiles, the sync script, and the offload workflow.
 | **executor** | `ollama/executor` | Implements steps via aider |
 
 Built `FROM hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:UD-Q3_K_XL`,
-`num_ctx 14336`. Planning and review are mine — no local planner or validator.
+`num_ctx 28672`. Planning and review are mine — no local planner or validator.
 
 Sync: `./ollama/sync-models.sh`
 

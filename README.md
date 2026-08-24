@@ -104,20 +104,33 @@ plus its KV cache is **100% VRAM-resident** — anything that spills crosses the
 AOOSTAR AG02 dock's OCuLink link (PCIe 4.0 x4, ~8 GB/s) instead of GDDR7
 (896 GB/s). Measured on this card:
 
-| Config | Footprint | On GPU | Decode |
-|---|---|---|---|
-| Qwen3-Coder Q3, `num_ctx` 32768 | 17.38GB | 89.2% | 30.9 tok/s |
-| Qwen3-Coder Q3, `num_ctx` 16384 | 15.55GB | 97.9% | 6.4 tok/s |
-| Qwen3-Coder Q3, **`num_ctx` 14336** | 15.14GB | **100%** | **105-113 tok/s** |
-| GLM-4.7-Flash Q3, `num_ctx` 32768 | 17.54GB | 89.3% | 25.8 tok/s |
-| GLM-4.7-Flash Q3, `num_ctx` 16384 | 15.60GB | 100% | 107.8 tok/s |
+Every row below with an f16 KV cache was measured before
+`OLLAMA_FLASH_ATTENTION` and `OLLAMA_KV_CACHE_TYPE` were actually set on the
+cluster — this file required them, the deployment never had them, and the KV
+cache silently stayed f16 at ~90KB/token. Setting them halves that to 45KB and
+doubles the context that fits.
 
-Both 13.8GB builds spill ~1.9GB at 32K and cost throughput for it — on GLM the
-same spill cost 4.2x. That is the whole reason for the ≤14GB rule.
+| Config | KV | Footprint | On GPU | Decode |
+|---|---|---|---|---|
+| Qwen3-Coder Q3, `num_ctx` 32768 | f16 | 17.38GB | 89.2% | 30.9 tok/s |
+| Qwen3-Coder Q3, `num_ctx` 16384 | f16 | 15.55GB | 97.9% | 6.4 tok/s |
+| Qwen3-Coder Q3, `num_ctx` 14336 | f16 | 15.14GB | 100% | 105-113 tok/s |
+| Qwen3-Coder Q3, `num_ctx` 14336 | q8_0 | 14.48GB | 100% | 122-133 tok/s |
+| Qwen3-Coder Q3, **`num_ctx` 28672** | **q8_0** | 15.24GB | **100%** | **109-129 tok/s** |
+| GLM-4.7-Flash Q3, `num_ctx` 32768 | f16 | 17.54GB | 89.3% | 25.8 tok/s |
+| GLM-4.7-Flash Q3, `num_ctx` 16384 | f16 | 15.60GB | 100% | 107.8 tok/s |
 
-The cliff is not gradual. Qwen3-Coder at 16384 misses full residency by 0.32GB
-and loses 94% of its decode rate; 2K less context buys all of it back. Treat
-`size_vram == size` in `/api/ps` as pass/fail, not as a gauge.
+The KV cache is the only part of the footprint that grows with context; weights
+and compute graph are a fixed 13.82GB. At q8_0 that leaves room for 28672
+tokens inside the same 15.14GB that was already proven resident — verified with
+a 20,973-token prompt at 4263 tok/s prefill, `size_vram == size` throughout.
+
+The cliff is not gradual. Qwen3-Coder at f16/16384 misses full residency by
+0.32GB and loses 94% of its decode rate; 2K less context buys all of it back.
+Treat `size_vram == size` in `/api/ps` as pass/fail, not as a gauge.
+
+Take the reading **warm**. The first request after a load charges CUDA init to
+decode and reports ~6 tok/s — identical to the spill signature, and wrong.
 
 What does *not* fit: `devstral-small-2:24b` (15GB), `qwen3.6:27b` (17GB),
 `qwen3-coder:30b-a3b` q4 (19GB), `glm-4.7-flash` official q4 tag (19GB),
@@ -149,8 +162,8 @@ source .env
 
 First sync downloads 13.8GB. Ollama must have `OLLAMA_FLASH_ATTENTION=1` and
 `OLLAMA_KV_CACHE_TYPE=q8_0` set (homelab repo) — without flash attention the KV
-cache type is silently ignored and falls back to f16, which pushes 16K context
-back over the VRAM budget.
+cache type is silently ignored and falls back to f16, which halves the context
+that fits inside the VRAM budget.
 
 `sync-models.sh` resolves the endpoint from `OLLAMA_HOST`, then
 `OLLAMA_API_BASE`, then `http://localhost:11434`. Supports `--dry-run` and
